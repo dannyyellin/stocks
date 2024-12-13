@@ -1,0 +1,32 @@
+version: '3'  # version of compose format
+
+services:
+  portfolio:
+    build:
+      context: ../stocks
+      dockerfile: Dockerfile
+    container_name: my-stock-service
+      # tells flask run to run in development mode and reload the code on change. This mode should only be used in
+      # development.
+    environment:
+      FLASK_DEBUG: "true"
+      env_file: .env
+      container_name: my-stock-service
+    ports:
+      - "5001:5001"  # host:container
+    restart: always
+#    volumes:
+#      - type: bind
+#        source: ./app #host directory
+#        target: /app # container directory
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo
+    #    environment:
+    #      MONGO_INITDB_ROOT_USERNAME: root
+    #      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+    container_name: my-mongo-service
+    ports:
+      - "27017:27017"
