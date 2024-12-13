@@ -1,0 +1,16 @@
+# created by virtualenv automatically
+*-2024*
+/bin
+/lib
+/LLMgenerateAndTest/NOT COMPLETE regen-services.py
+LLMgenerateAndTest/reruns*
+/stocks/Backup GT-stocks.py
+/stocks/requirements.txt
+/stocks.py
+/testDOckerReqs
+/testing_docker_down.py
+/tests/OLD_libraryTests.py
+.env
+.Python
+pyvenv.cfg
+testing_docker_down.py

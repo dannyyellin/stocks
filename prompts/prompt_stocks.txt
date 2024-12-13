@@ -1,0 +1,42 @@
+Below is (I) a description a microservice for a stock portfolio application and (II) code generation guidelines.  Generate code for the stocks microservice following the guidelines.  The code you generate should be complete and executable.
+(I) Description of stock portfolio microservice:
+{“Name”: “Stocks microservice”,
+“Description”: "Responsible for creating, retrieving, updating, and deleting stock items in a stock portfolio.  This service also can provide the value of the shares of specific stock contained in the portfolio or the value of the entire portfolio based upon the current stock prices.  A 3rd party API is used to retrieve current stock prices."
+
+“Resources”: “/stocks, /stocks/{id}, /stock-value/{id}, /portfolio-value
+/stocks is a collection of stock objects.  These stocks comprise the portfolio.
+/stocks/{id} is the stock object in /stocks that is assigned the given id, a string. Each stock object (/stocks/{id}) is a JSON document containing the fields ‘name’, ‘symbol’, ‘id’, 'purchase price', 'purchase date', and 'shares'.  ‘name’ is a string giving the name of the company, ‘symbol’ is a string giving the symbol for this stock, ‘id’ is the string id assigned by the server to this stock object, 'purchase price' is a float of 2 decimal places, 'purchase date' is a string of the form 'DD-MM-YYYY', and 'shares' is an integer giving the number of shares of this stock in the portfolio.
+/stock-value/{id} is the current value of the stock of that id in the portfolio (= current stock price x number of shares). It is represented as a float rounded to two decimal places.
+/portfolio-value is the current value of the portfolio, that is, the sum of the values of the stocks in the portfolio, given as a float rounded to two decimal places."
+
+“REST requests”:
+“/stocks supports GET and POST requests.
+The GET request, if successful, returns a JSON array of all objects in the /stocks collection. The GET request may specify a query string of the form ‘field=value’.  In this case, only those stocks satisfying that constraint should be returned.  This request can return status codes of 200 or 500.
+The POST request provides a JSON object that must contain the 'symbol', 'purchase price', and 'shares' fields.   Optionally it can also provide the ‘name’ and 'purchase date' of the stock.  If the ‘name’ or ‘purchase date’ is not supplied for a stock, the JSON for those fields is the string ‘NA’ (Not Available). It returns a JSON object with one field named 'id' whose value is the newly created string id of the posted resource.  This request can return status codes of 201, 400, 415 and 500.
+
+/stocks/{id} supports GET, PUT and DELETE requests.
+The GET request, if successful, returns the JSON stock object for the requested id.  This request can return status codes of 200, 404 and 500.
+The PUT request, provides a JSON payload of the stock object, including its id field.  It returns, if successful, a JSON object with one field named 'id' whose value is the string id of the requested resource.  This request can return status codes of 200, 400, 404, 415 and 500.
+The DELETE request, if successful, returns status code 204 with no content; i.e., the empty string.   This request can return status codes of 204, 404 and 500.
+
+/stock-value/{id} supports the GET request. If successful, it returns the JSON object containing the fields 'symbol', whose value is the stock symbol of the requested stock, the field 'ticker' which is a float of 2 decimal places giving the current value of a single share of this stock, and the field 'stock value', which is a float of 2 decimal places giving the value of this stock in the portfolio. This is computed by multiplying the number of shares of this stock in the portfolio times its current stock price.  This request can return status codes of 200, 404 and 500.
+
+/portfolio-value supports the GET request. If successful, it returns the JSON object containing the fields 'date', the current date represented as a string in the format 'DD-MM-YYYY', and the field 'portfolio value', a float of 2 decimal places giving current value of the portfolio, which is the sum of the value of each stock (#shares*stock price) in the portfolio.  This request can return the status codes 200 and 500.
+"
+
+“Additional details”: “The current value of a stock is determined by calling the Ninja API 'https://api.api-ninjas.com/v1/stockprice?ticker=SYMBOL, where SYMBOL is the ticker symbol of the stock.  There is an environment variable NINJA_API_KEY that you should use to issue API calls.
+Every id is a unique string.  If an object is deleted, its id should not be reused by a new object.
+"
+
+“Deployment”: “This microservice runs in a Docker container and listens on external port 5001.”
+}
+
+
+(II) Code Generation Guidelines:
+Code Generation Guidelines
+•	Each microservice should be written in Python.
+•	The code must be executable.  Besides comments in the code, no other text in the response.
+•	Each microservice should store its persistent data in a Mongo database.   Assume that Mongo is available at 'mongodb://mongo:27017/'.
+•	The generated code should handle REST API exceptions and return the appropriate REST (HTTP) status code:
+    -- Each REST request should return a status code in addition to the JSON payload if there is one.   The codes 200 and 201 are used on successful execution.   The following codes are used on unsuccessful execution:   400 (Bad request), 404 (Not Found), 405 (Method Not Allowed), 415 (Unsupported media type), and 500 (Internal Server Error).
+•	Assume that each microservice will be run in its own Docker container.

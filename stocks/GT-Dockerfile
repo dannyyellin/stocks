@@ -1,0 +1,25 @@
+FROM python:alpine3.17
+# WORKDIR ./app
+#RUN pip install Flask
+#RUN pip install pymongo
+#RUN pip install Flask-RESTful
+#RUN pip install Flask-Pymongo
+#RUN pip install requests
+COPY GT-requirements.txt .
+# RUN pip install --use-pep517 -r GT-requirements.txt --ignore-installed --no-cache-dir
+RUN pip install --upgrade pip
+RUN pip install -r GT-requirements.txt --ignore-installed --no-cache-dir
+#  RUN pip install bson   pymongo uses bson so need to import it.  doing so causes problems.
+# so I removed "install bson from GT-requirements.txt".   works ok without this import.
+ENV FLASK_APP=GT-stocks.py
+ENV FLASK_RUN_PORT=5001
+ENV FLASK_DEBUG: "true"
+ADD GT-stocks.py .
+EXPOSE 5001
+
+# Set the directive to specify the executable that will run when the container is initiated
+#ENTRYPOINT [ "python" ]
+
+# Specify the command to run on container start
+CMD ["flask", "run", "--host=0.0.0.0"]
+
