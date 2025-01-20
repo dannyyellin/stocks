@@ -1,0 +1,3 @@
+16/1/2025 12:00 added:  meta data file records if prompt includes example service.
+                        also name of directory recording if prompt uses example service
+                        ran 30 tests (10 for each temperature) in exampleGPT3.5 before making this change.

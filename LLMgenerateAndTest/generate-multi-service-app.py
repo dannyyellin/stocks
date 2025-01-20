@@ -1,72 +1,44 @@
-# The program uses the LangGraph framework to generate code for a microservice S and test it as follows:
-# 1. Invoke graphInit to initialize graph state
-# 2. Invoke generate_microservice to synthesize the microservice S code per requirements and code generation guidelines.
-#    Store the generated microservice in a file as well as in graph state.
+
+# This program iteratively generates each microservice (one at a time, total 4) comprising a public library application.
+# Each iteration will test the application using the generated microservice and using the ground truth (GT)
+# implementations of the 3 other microservices, effectively testing just the generated microservice.
+# The program uses the LangGraph framework.
+# For each iteration (generating one of the microservices S):
+# 1. Invoke graphInit to initialize graph state,including initial prompt
+# 2. Invoke generate_microservice to synthesize the S microservice code per requirements and code generation guidelines.
+#    Store the generated microservice in a file.
 # 3. Invoke run_docker_and_tests:
-#    (i) copies the generated code for S to the appropriate directory, It also generates the requirements.txt file for
-#    S for the Dockefile to use.
-#    (ii) removes existing docker image for S if one already exists.  removes any existing containers before starting up
-#    the containers for running S.   runs docker compose to execute the code S and any other necessary containers.
-#    (iii) tests the system using unit tests.
-#    (iv) finds and records any run-time and test errors when running the unit test logs.   It does this as follows:
-#       a.  collect the output from the unit tests (on stdout).   extract the output starting from the keyword
-#           "Traceback". then "compress" these error messages (as it can be voluminous and contains information that is
-#           hard to use for debugging).  The compression finds lines containing "S.py", where S is the name of the
-#           service being generated (we assume the code being tested is in a file of that name).   It will take the line
-#           containing "S.py" and the next 4 lines, as usually that suffices to describe the error.
-#       b.  collect the docker log files from the docker container for S.    follow the same process as in (a) to
-#           collect and compress error messages.
-#           **** NEED TO CHECK that there is not overlap between (a) and (b)  ********
-#       c.  append the error messages from (b) to those from (a) to form the runtime error messages RT.  if RT is empty,
-#           there are no RT error messages.  If it is not empty, then set the error messages E to be RT.
-#       d.  if there are not any RT errors, then assuming there are test errors TE (report from the unit tests on failed
-#           tests), set E to TE together with the direct output from the unit tests (the output it prints to stdout).
-#  ***## Or do I always append TE to the error messages?  *****
-#    (v) shuts down the containers and removes them using docker compose down command.
-# 4. Execute agent Chk4rErr.   If there are errors (either runtime errors or test errors) and the program has not reached
+#    (a) copies the generated code for S to the appropriate directory, It also finds the requirements for S and
+#    generates a requirements.txt file for the Dockefile to use.
+#    (b) sets up docker containers to run the code generated for S, and the ground truth code for the other
+#    services.   It uses docker-compose.
+#    (c) tests the system using the public library unit tests. (d) records any errors
+#    in the docker log for service S, and
+#    (e) shuts down the containers and removes them.
+# 4. Execute agent Chk4rErr.   If there are testing errors and the docker log file has errors and have not reached
 #    MAX_RETRIES, then go to 5. Otherwise, if no errors or have errors and MAX_RETRIES reached, go to (7).
-# 5  Execute agent ReflectOnErr.   Reflect on the error messages.  Store the result of the reflection.
+# 5  Execute agent ReflectOnErr.   Reflect on errors in the docker log file.  Add reflection response to prompt for S.
 # 6. Using revised prompt, execute agent ReGenQueryPgm, generating a new program taking the errors and reflection into
 #    consideration. Goto (3).
 # 7. Execute agent FinalizeOut.   Finalize outputs and go to END.
 #
-#  Throughout these steps, metadata is collected and printed to a metadata file (mostly on model related statistics,
-#  like number of tokens used,...).
-#
-# Output of program is 5 files (per code generation), plus one metadata file.   These are stored in the subdirectory
-# <timestamp>-<model>.# Example: "16-08-2024?-4852-gpt-35-16k"
-# **** STORE then im TESTS-<descriptor>/subdirectory
+# Output of program is 5 files.   These are stored in the subdirectory <timestamp>-<model>.
+# Example: "16-08-2024?-4852-gpt-35-16k"
 # a. <service-name>-s<n1>-v<n2>.py is the generated code.   There can be more than one file, as n1 is the sample number
-#    of the generated code (we are only using s=1 for now, so this is not currehtly significant), and n2 ranges from 0
-#    to MAX_RETRIES;  I.e., for n2 > 0,
-#    the file contains the regenerated code (i.e., version n2-1 had errors, and we have not yet reached MAX_RETRIES).
-# b. <service-name>-s<n1>-v<n2>-runtime-errors.txt is the python runtime errors (including docker log file) containing
-#    Python Traceback errors for the generated program <service-name>-s<n1>-v<n2>.py.  This file is only generated if
-#    the Python execution generated Traceback errors.
+#    of the generated code (we are using s=1 for now), and n2 ranges from 0 to MAX_RETRIES;  I.e., for n2 > 0, it is the
+#    regenerated code when version n2-1 had errors and we have not yet reached MAX_RETRIES.
+# b. <service-name>-s<n1>-v<n2>-runtime-errors.txt is the docker log containing Python Traceback errors for the
+#    generated program <service-name>-s<n1>-v<n2>.py.
 # c. <service-name>-s<n1>-v<n2>-test-errors.txt is the list of failed unit tests for <service-name>-s<n1>-v<n2>.py with
-#    a message explaining the failure.  This file is generated by the unit test script.   This file is only generated
-#    if there are any unit tests that fail.
-# d. <service-name>-s<n1>-v<n2>-test-log.txt is the log file providing details on which tests passed or failed and
-#    includes generated statistics.  This file is generated by the unit test script.
+#    a message explaining the failure.  This file is generated by the unit test script.
+# d. <service-name>-s<n1>-v<n2>-test-log.txt is the log file providing more details on which tests passed or failed and
+#    generated statistics.  This file is generated by the unit test script.
 # e. <service-name>-s<n1>-v<n2>-reflect.txt is the generated reflection the describes the cause of the errors in
 #    <service-name>-s<n1>-v<n2>-runtime-errors.txt
-# f. meta_data is a text file that logs information about the parameters of the various LLM invocations.
 
-# to use this program you need to set:
-# 1. the base_dir variable (bottom of file), 2. the SERVICES variable (top of file) listing all the services to generate
-# code for, (3) the test_prog state vaariable giving the location of the test script (in the langgraph node graphInit),
-# (4) any changes you want to the meta variables controlling which model, temperature etc. to use, as well the number of
-# retries.
 
-# under the base dir are the subdirectories:
-# - <service_name>: containing the ground truth code and the requirements.txt file for that service, and the Dockerfile
-#    for that service.  The LLM generated service and its requirements.txt file will also be placed there.
-# -  LLMgeneratedAndTest: containing this code.
-# - tests: containing the testing code
-# - prompts:  containing LLM prompts used by this program
-
-# ** GENERALIZE ** comments in the code for places that need to be generalized, fixed
 import shutil
+
 import time
 from helpers import get_section, has_multiple_lines, extract_errors, generate_requirements_file
 from docker_funcs import list_containers, is_container_running, remove_all_containers, list_images, remove_image
@@ -123,21 +95,19 @@ else:   # using GPT4 with less tokens
     MAX_TOKENS_1 = MAX_TOKENS_GPT4_1
     MAX_TOKENS_2 = MAX_TOKENS_GPT4_2
 
-NUM_SAMPLES = 1    # number of samples code LLM should generate in one invocation
-MAX_RETRIES = 1    # max number of times to retry to generate error-free program
-SERVICES = ['stocks']
-BASE_DIR = "/Users/danielyellin/PycharmProjects/stocks/"
+NUM_SAMPLES = 1
+MAX_RETRIES = 2  # max number of times to retry to generate error-free program
+SERVICES = ['cardholders','books','borrows','logs']
+BASE_DIR = ??? "/Users/danielyellin/PycharmProjects/stocks/" /Users/danielyellin/PycharmProjects/RestGen/automation/generate/"
 GEN_DIR_PREFIX = "TestsForPaper/"
 TEST_PROG = "/Users/danielyellin/PycharmProjects/stocks/tests/unitTests.py"
-DOCKER_CONTAINER_NAME = "/my-stock-service"
+DOCKER_CONTAINER_NAME = "/???"  "/my-stock-service"
 MONGO_CONTAINER_NAME = "/my-mongo-service"
-DOCKER_IMAGE_NAME = 'stocks-portfolio:latest'
+DOCKER_IMAGE_NAME = '??'  'stocks-portfolio:latest'
 REGEN_JUST_ERRS = True   # When True then when re-generating code, only supply the error code and the error messages
 # REGEN_JUST_ERRS = False  # When False, also supply the microservice description.
 INCLUDE_EX_CODE = True       # When True, supplying example Python, Flask, MongoDB code as "template"
 # INCLUDE_EX_CODE = False
-
-# --------- END Initialize variables  --------#
 
 client = AzureOpenAI(
     api_key= AZURE_OPENAI_API_KEY,
@@ -146,7 +116,7 @@ client = AzureOpenAI(
 )
 
 
-# get_section, has_multiple_lines, extract_requirements functions are defined in helpers2.py
+# get_section and has_multiple_lines defined in helpers
 # def get_section(file_content, start_pattern, end_pattern, include_start_pattern=True):
     # This function takes a string "file_content" and returns the substring starting with the start_pattern and
     # ending with the end_pattern.   If the start_pattern and the end pattern  are not found, it returns
@@ -155,6 +125,8 @@ client = AzureOpenAI(
     # substring from the start_pattern until the end of the string.
     # print(f"file_content = \n{file_content}, \nstart_pattern = '{start_pattern}', end_pattern = '{end_pattern}'")
     # print(f"get_section: start_pattern = {start_pattern}")
+
+
 # def has_multiple_lines(file_path):
 #   """Checks if a file has more than one line.
 # def generate_requirements_file(program_string, dir):
@@ -163,38 +135,43 @@ client = AzureOpenAI(
 
 # state that is passed from node to node of graph
 class GraphState(TypedDict):
-    service_name: str             # name of service
-    docker_container_name:str     # name of docker container running this microservice
-    mongo_container_name: str     # name of docker container for mongoDB
-    docker_image_name:str         # name of image used to create container for this service
+    service_name: str               # one of "cardholders", "books", "borrows", or "logs".  initialized before calling graphInit
+    # docker_container_name:str     # name of docker container running this microservice
+    # mongo_container_name: str     # name of docker container for mongoDB
+    # docker_image_name:str         # name of image used to create container for this service
     sample_num: int               # as we may experiment multiple times, we give each sample its own number. initialized
                                   # before calling graphInit.  Since we currently generate just one sample per LLM call,
                                   # not significant currently
-    base_dir: str                 # base directory where ground truth (GT) services reside
-    gen_dir: str                  # subdirectory of base_dir where the generated code and artifacts are put
-    test_prog: str                # the full path name of the program that executes tests on the microservices
-    initial_user_prompt: str      # initial user prompt for generating this microservice code
-    initial_sys_prompt: str       # "" system prompt ""
-    ms_code: str                  # last microservice code generated
-    hasRTerrs: bool               # boolean indicating whether there were any runtime Python errors when executing tests
-    hasTestErrs: bool             # boolean indicating whether any microservice tests failed
-    errors: str                   # the run-time errors from current ms_code
-    reflection: str               # reflection on the nature of the error in the program
-    num_retries: int              # number of times retried to generate working microservice code
+    base_dir: str                   # base directory where ground truth (GT) services reside
+    gen_dir: str                    # subdirectory of base_dir where the generated code and artifacts are put
+    test_prog: str                  # the full path name of the program that executes tests on the microservices
+    initial_user_prompt: str        # initial user prompt for generating this microservice code
+    initial_sys_prompt: str         # "" system prompt ""
+    ms_code: str                    # last microservice code generated
+    hasRTerrs: bool                 # boolean indicating whether there were any runtime Python errors when executing tests
+    hasTestErrs: bool               # boolean indicating whether any microservice tests failed
+    errors: str                     # the run-time errors from current ms_code
+    reflection: str                 # reflection on the nature of the error in the program
+    num_retries: int                # number of times retried to generate working microservice code
 
 
 # agent to initialize GraphState.   note that service_name is initialized before entering this agent
 def graphInit(state):
     print("** Entering Agent GraphInit **")
-    # base_dir is the base directory where the service GT code and dockerfile are stored.
+    # base_dir is the base directory where the cardholders, books, borrows and logs GT code and dockerfiles are stored.
     # gen_dir = base_dir/timestamp&model will be the directory to store the generated services.
     # test_prog is the python script that tests the microservices
     # state['base_dir'], state['gen_dir'], state["service_name"], state["sample_num"] are initialized before invoking
     # this function.
     # create initial user prompt
+    f = open(state["base_dir"] + "prompts/prompt_addendum")
+    addendum = f.read()
+    f.close()
     service_specific_prompt_file = state["base_dir"]  + "prompts/prompt_" + state["service_name"] + ".txt"
     f = open(service_specific_prompt_file)
     service_specific_prompt = f.read()
+    state["initial_sys_prompt"] = {"role": "system", "content": "You are an expert in generating Python microservices using REST APIs"}
+    state["initial_user_prompt"] = {"role": "user", "content": service_specific_prompt + addendum}
     f.close()
     if INCLUDE_EX_CODE:
         example_promppt_file = state["base_dir"] + "prompts/prompt_" + "example" + ".txt"
@@ -233,10 +210,10 @@ def generateMicroservice(state):
                   f"   service = {service_name}\n"
                   f"   MAX_TOKENS_1 requests =  {MAX_TOKENS_1}\n"
                   f"   Total tokens used = {responses.usage.total_tokens}\n"
-                  f"   Prompt tokens = {responses.usage.prompt_tokens}, "
-                  f"   Completion_tokens = {responses.usage.completion_tokens}\n"
+                  f"   Prompt tokens = {responses.usage.prompt_tokens}, Completion_tokens = {responses.usage.completion_tokens}\n"
                   f"   Temperature = {TEMP}\n\n"
                   )
+
     ms_code = responses.choices[0].message.content
     # remove leading "```python" until "```" if found.
     # if trailing 3 single quotation marks are missing, should still remove initial `"``python".
@@ -258,7 +235,7 @@ def generateMicroservice(state):
 def runDockerAndTest(state):
     print("** Entering Agent RunDockerAndTest **")
     # (i) copy files to set up docker compose.  it will run the LLM-generated code for the microservice and the
-    # ground truth for all the other services (if there are other services).
+    # ground truth for all the other services.
     # (ii) execute docker-compose to run the microservices.
     # (iii) run the tests on the microservices.  The tests are in the python script test_fn
     # (iv) store the run-time errors during testing. the test results are stored by the test script.
@@ -275,10 +252,23 @@ def runDockerAndTest(state):
     gen_service_prefix = gen_dir + log_fn_prefix  # gen_service_prefix is log_fn_prefix with full path
     print(f"base_dir = {base_dir} and gen_dir = {gen_dir} and service_name = {service_name}")
 
-    # i.  copy the code for the generated service to the appropriate directory.  the generated code for service S has
-    # the name "S-vn.py", where n = version num
-    # **GENERALIZE**   the directory structure below: {service_name}/{service_name}.py
-    shutil.copyfile(gen_service_prefix + ".py", base_dir + f"{service_name}/{service_name}.py")
+    # (i) copy program files
+
+    shutil.copyfile(base_dir + "cardholders/GT-cardholders.py", base_dir + "cardholders/cardholders.py")
+    # print(f"copied from {base_dir} + 'cardholders/GT-cardholders.py' to {base_dir} + 'cardholders/cardholders.py' ")
+    shutil.copyfile(base_dir + "books/GT-books.py", base_dir + "books/books.py")
+    shutil.copyfile(base_dir + "borrows/GT-borrows.py", base_dir + "borrows/borrows.py")
+    shutil.copyfile(base_dir + "logs/GT-logs.py", base_dir + "logs/logs.py")
+    # i-b.  copy the code for the generated service to the appropriate directory.  the generated code for service S has the name "S-vn.py", where n = version num
+    base_filename = state["gen_dir"] + service_name + "-s" + str(state['sample_num']) + "-v" + str(state['num_retries'])
+    shutil.copyfile(base_filename + ".py", base_dir + state["service_name"] + "/" + state["service_name"] + ".py")
+    # print(f"copied from {base_filename} +'.py' to {base_dir} + {state['service_name']} + '/' + {state['service_name']} + '.py' ")
+
+    # copy requirements files
+    shutil.copyfile(base_dir + "cardholders/GT-requirements.txt", base_dir + "cardholders/requirements.txt")
+    shutil.copyfile(base_dir + "books/GT-requirements.txt", base_dir + "books/requirements.txt")
+    shutil.copyfile(base_dir + "borrows/GT-requirements.txt", base_dir + "borrows/requirements.txt")
+    shutil.copyfile(base_dir + "logs/GT-requirements.txt", base_dir + "logs/requirements.txt")
     # generate requirements file for generated code and copy it to write directory
     try:
         h = open(gen_service_prefix + ".py", "r")
@@ -290,23 +280,21 @@ def runDockerAndTest(state):
         print("************ Exception when generating requiorements ************ ")
         print("exception = ", e)
 
-
-    # ii. remove old images and containers then run docker compose so that the services are running
-    print("************ Removing any existing Docker microservice images (except mongo) and containers ************")
-    ### **GENERALIZE: NEED TO FIX THIS IF RUNNINIG MULTIPLE SERVICES **
-    # list_images()
-    # for service in SERVICES:
-    #     print("attempting to delete image mystate['docker_image_name")
-    remove_image(mystate['docker_image_name'])
-    print(f"images remaining after trying to remove {mystate['docker_image_name']}")
-    list_images()
-    print("existing containers: ")
+    # ii. remove old images and then run docker compose so that the services are running
+    print("************ Removing any existing Docker microservice images ************")
+    remove_old_image("generate-cardholders")
+    remove_old_image("generate-books")
+    remove_old_image("generate-borrows")
+	remove_old_image("generate-logs")
+	print("existing containers: ")
     # list_containers()
     print("attempting to delete containers mystate['docker_container_name']' and mystate['mongo_container_name'] ")
     # we remove all existing containers (not just the two stated above) to avoid naming issues.
     remove_all_containers()
     print("containers remaining after trying to delete containers")
     list_containers()
+    
+
     print("************ Setting up containers using Docker Compose ************")
     try:
         # IMPORTANT NOTE.   This docker compose up cmd works correctly this cmd is run in the same directory that
@@ -338,7 +326,9 @@ def runDockerAndTest(state):
     upAndRunnning = False
     while loopnum < 2 and not upAndRunnning:
         # Example usage (assuming 'docker' library is installed)
-        container_name = mystate['docker_container_name']
+		container_name = mystate['docker_container_name']. # new  or old (next line)
+        container_name = "/generate-" + state["service_name"] + "-1"
+
         if is_container_running(container_name):
             upAndRunnning = True
         else:
@@ -444,7 +434,8 @@ def runDockerAndTest(state):
         print("************ Exception when executing tests ************ ")
         print("exception = ", e)
 
-    # v. kill and remove the containers
+
+    # 5. kill and remove the containers
     try:
         print("************ Removing containers ************ ")
         print("images before docker compose down call")
@@ -582,6 +573,7 @@ def reGenPgm(state):
     return state
 
 
+
 # FinalizeOut agent is entered if we are terminating the program but we still have errors.
 def finalizeOut(state):
     print("** Entering Agent FinalizeOut **")
@@ -636,7 +628,6 @@ def finalizeOut(state):
     return state
 
 
-# ---------   start main program    ---------#
 # build langgraph graph
 workflow = StateGraph(GraphState)
 workflow.add_node("GraphInit", graphInit)

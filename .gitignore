@@ -14,3 +14,4 @@ LLMgenerateAndTest/reruns*
 .Python
 pyvenv.cfg
 testing_docker_down.py
+.idea*

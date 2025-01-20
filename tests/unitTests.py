@@ -460,7 +460,7 @@ StockSpecificPassed = [x for x in testsPassed if x in range(14, 14)]
 StockSpecificFailed = [x for x in testsFailed if x in range(14, 14)]
 
 g = open(log_name, "w")
-print("opened log file = ", log_name)
+# print("opened log file = ", log_name)
 g.write("test\n")
 current_time = datetime.now()
 formatted_time = current_time.strftime('%d/%m/%Y:%H:%M:%S')

@@ -2,4 +2,6 @@ Examine the error messages given above.   For at most 5 errors, provide an expla
 located, (b) what the error is, and (c) how to fix it.  Your explanation should be precise so that a programmer
 can follow your instructions and correct the errors.   Do not consider Warnings or the fact that the container
 is not running on a production server.  If there is not enough information in the error messages, then consider which
-tests failed and examine the code to determine what changes to the code are needed.
+tests failed and examine the code to determine what changes to the code are needed.   Think what may have caused the
+error, including preceding requests.  For example, a GET request may return a 404 status code if the previous POST
+request adding that item failed.
